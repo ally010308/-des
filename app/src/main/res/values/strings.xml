@@ -18,5 +18,7 @@
 
     <string name="label_totalDis">Total Distance: %1$.2f</string>
 
+    <string name="label_count">정지 횟수: %i</string>
+
     <string name="error_no_sensor">Sensor not available!</string>
 </resources>

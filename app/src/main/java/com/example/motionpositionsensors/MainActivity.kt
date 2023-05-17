@@ -1,15 +1,17 @@
 package com.example.motionpositionsensors
 
-import androidx.appcompat.app.AppCompatActivity
-import android.os.Bundle
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Handler
+import android.os.Bundle
 import android.view.View
-import android.widget.TextView
+import android.widget.*
+import androidx.appcompat.app.AppCompatActivity
+import java.util.*
+import kotlin.collections.ArrayList
+import kotlin.coroutines.*
 import kotlin.math.pow
 import kotlin.math.round
 import kotlin.math.sqrt
@@ -21,6 +23,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     // sensors
     private var mSensorLinearAcceleration: Sensor? = null
 
+    //텍스트 뷰어
     private var tvLineX: TextView? = null
     private var tvLineY: TextView? = null
     private var tvLineZ: TextView? = null
@@ -36,34 +39,55 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private var tvTotD: TextView? = null
 
+    private var tvCount: TextView? = null
 
-    // Sensor's values
+
+    // Sensor's values 행렬에 저장됨 0>x, 1>y, 2>z
     private var line = FloatArray(3)
 
+
+    // 거리 계산용
     private var nowAccX = 0F  //Float 타입임
     private var recentSpeedX:Float = 0F //A
     private var nowSpeedX:Float = 0F  //B
-    private var nowDistanceX:Float = 0F
     private var distanceX:Float = 0F //이동거리
 
     private var nowAccY = 0F  //Float 타입임
     private var recentSpeedY:Float = 0F //A
     private var nowSpeedY:Float = 0F  //B
-    private var nowDistanceY:Float = 0F
     private var distanceY:Float = 0F //이동거리
 
     private var nowAccZ = 0F  //Float 타입임
     private var recentSpeedZ:Float = 0F //A
     private var nowSpeedZ:Float = 0F  //B
-    private var nowDistanceZ:Float = 0F
     private var distanceZ:Float = 0F //이동거리
 
-
     private var totalD:Float = 0F //이동거리
+    private var totalSpeed = 0F
+    private var last_TotalSp = 0F
+    private var isMoving: Boolean = false
+
+    private var betweenStationDis:Float = 0F
+
+    private var stopCount = 0 //멈춤 카운트
+
+    private lateinit var listView: ListView
+    private lateinit var adapter: ArrayAdapter<String>
+    private val dataList: MutableList<String> = mutableListOf()
+
+    //시간계산
+    private var previousTime:Long = System.currentTimeMillis()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        //
+        listView = findViewById(R.id.listView)
+        // 어댑터 초기화
+        adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, dataList)
+        // ListView에 어댑터 설정
+        listView.adapter = adapter
 
         // Identify the sensors that are on a device
         mSensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -84,12 +108,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         tvTotD = findViewById<View>(R.id.label_totalDis) as TextView
 
+        tvCount = findViewById<View>(R.id.count) as TextView
+
         // sensors connection
         mSensorLinearAcceleration = mSensorManager!!.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
 
         // Check if all sensors are available
         val sensor_error = resources.getString(R.string.error_no_sensor)
 
+        //센서 에러나면 출력
         if (mSensorLinearAcceleration == null) {
             tvLineX!!.text = sensor_error
             tvLineY!!.text = sensor_error
@@ -106,13 +133,30 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
             tvTotD!!.text = sensor_error
         }
+        /* 테스트용
+        println("현재시간: $previousTime")
+        previousTime = System.currentTimeMillis() - previousTime
+        println("현재시간플롯: $previousTime")
+        println("현재시간플롯: ${previousTime.toFloat()}")
+        println("속도: ${line[0]}")
+        println("속도더블: ${line[0].toDouble()}")
+        */
+
+        val stopButton: Button = findViewById(R.id.stop_button)
+        stopButton.setOnClickListener {
+            // 버튼을 클릭했을 때 실행되어야 하는 동작을 여기에 작성합니다.
+            reset()
+            Toast.makeText(this, "이동이 멈춤", Toast.LENGTH_LONG).show()
+        }
     }
 
-    override fun onStart() {
+
+    override fun onStart() { //앱 실행시 시작하는 구간
         super.onStart()
         if (mSensorLinearAcceleration != null) { mSensorManager!!.registerListener(this, mSensorLinearAcceleration, SensorManager.SENSOR_DELAY_NORMAL) }
 
-        handler.post(handlerTask)
+        //handler.post(handlerTask)
+
     }
 
     override fun onStop() {
@@ -132,21 +176,156 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 tvLineY!!.text = resources.getString(R.string.label_lineY, line[1])
                 tvLineZ!!.text = resources.getString(R.string.label_lineZ, line[2])
 
-                nowAccX = round(line[0]*100)/100
+                nowAccX = round(line[0]*100)/100  //소수점 두번째 까지 끊음
                 nowAccY = round(line[1]*100)/100
                 nowAccZ = round(line[2]*100)/100
+
+                getDiswT()
+                tvSpeedX!!.text = resources.getString(R.string.label_speedX, nowSpeedX)
+                tvDisX!!.text = resources.getString(R.string.label_disX, distanceX)
+
+                tvSpeedY!!.text = resources.getString(R.string.label_speedY, nowSpeedY)
+                tvDisY!!.text = resources.getString(R.string.label_disY, distanceY)
+
+                tvSpeedZ!!.text = resources.getString(R.string.label_speedZ, nowSpeedZ)
+                tvDisZ!!.text = resources.getString(R.string.label_disZ, distanceZ)
+
+                tvTotD!!.text = resources.getString(R.string.label_totalDis, totalD)
+
+                testStop()
+
             }
             else -> { }
         }
 
     }
 
-    private fun getDistanceX() {
-        nowSpeedX = recentSpeedX+(nowAccX/100)
-        nowDistanceX = ((nowSpeedX+recentSpeedX)/2)/100
-        distanceX += nowDistanceX
-        recentSpeedX = nowSpeedX
+    //시간대비 계산
+    private fun getDiswT() {
+        val currentTime = System.currentTimeMillis()
+        val elapsedTime = (currentTime - previousTime) / 1000.0
 
+        //X
+        nowSpeedX = recentSpeedX+nowAccX*(elapsedTime.toFloat())
+        val avgSpeedX = (nowSpeedX+recentSpeedX) / 2
+        distanceX = avgSpeedX*elapsedTime.toFloat()
+
+        //Y
+        nowSpeedY = recentSpeedY+nowAccY*elapsedTime.toFloat()
+        val avgSpeedY = (nowSpeedY+recentSpeedY) / 2
+        distanceY = avgSpeedY*elapsedTime.toFloat()
+
+        //Z
+        nowSpeedZ = recentSpeedZ+nowAccZ*elapsedTime.toFloat()
+        val avgSpeedZ = (nowSpeedZ+recentSpeedZ) / 2
+        distanceZ = avgSpeedZ*elapsedTime.toFloat()
+
+
+        //총 거리
+        totalD += sqrt((distanceX).pow(2)+(distanceY).pow(2)+(distanceZ).pow(2))
+
+        //역간거리
+        betweenStationDis+= sqrt((distanceX).pow(2)+(distanceY).pow(2)+(distanceZ).pow(2))
+
+        //이월
+        recentSpeedX = nowSpeedX
+        recentSpeedY = nowSpeedY
+        recentSpeedZ = nowSpeedZ
+        previousTime = currentTime
+
+    }
+
+    private fun testStop() {
+
+        val x = nowSpeedX
+        val y = nowSpeedY
+        val z = nowSpeedZ
+
+        last_TotalSp = totalSpeed
+        totalSpeed = sqrt((x * x + y * y + z * z).toDouble()).toFloat()
+        val deltaSpeed = totalSpeed - last_TotalSp
+
+        if (deltaSpeed > 1.5f) {
+            // 이동 감지
+            isMoving = true
+        } else if (isMoving && totalSpeed < 10) {
+            Toast.makeText(this, "이동이 멈춤", Toast.LENGTH_LONG).show()
+            isMoving = false
+            stopCount++
+            tvCount!!.text = resources.getString(R.string.label_count, stopCount)
+            reset()
+        }
+    }
+    private fun reset() {
+        nowAccX = 0F
+        nowAccY = 0f
+        nowAccZ = 0f
+        recentSpeedX = 0f
+        recentSpeedY = 0f
+        recentSpeedZ = 0f
+
+
+        //현재까지 이동거리 저장
+
+        dataList.add(betweenStationDis.toString())
+
+        // 어댑터에 변경 사항 알림
+        adapter.notifyDataSetChanged()
+
+        betweenStationDis=0f
+    /*
+        val adapter = listView.adapter as ArrayAdapter<String>(applicationContext, android.R.layout.simple_list_item_1, items)
+        adapter.add(betweenStationDis.toString())
+        adapter.notifyDataSetChanged()
+
+         */
+    }
+
+    //하단 단순 필터링은 일단 주석처리
+    /*
+    val handler = Handler()
+
+
+    val millisTime = 3000  //1000=1초에 한번씩 실행
+    private val handlerTask = object : Runnable {
+        override fun run() {
+
+            recentSpeedX=filter(recentSpeedX)
+            recentSpeedY=filter(recentSpeedY)
+            recentSpeedZ=filter(recentSpeedZ)
+
+            handler.postDelayed(this, millisTime.toLong()) // millisTiem 이후 다시
+        }
+    }
+
+    fun filter (filteringVal:Float): Float {
+        if(filteringVal < 0.3){
+            /*
+            Handler(Looper.getMainLooper()).postDelayed({
+                if(filteringVal <0.3){
+                    return@postDelayed 0
+                }
+                else {
+                    return@postDelayed filteringVal
+                }
+            }, 3000)
+
+             */
+            Toast.makeText(this@MainActivity, "filtered!", Toast.LENGTH_SHORT).show()
+            return 0.0F
+        }
+        else {
+            return filteringVal
+        }
+
+
+    }
+
+     */
+
+    /*
+    //거리 계산용
+    private fun getDistanceX() {
         nowSpeedY = recentSpeedY+(nowAccY/100)
         nowDistanceY = ((nowSpeedY+recentSpeedY)/2)/100
         distanceY += nowDistanceY
@@ -160,29 +339,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         totalD += sqrt((nowDistanceX).pow(2)+(nowDistanceY).pow(2)+(nowDistanceZ).pow(2))
 
     }
+     */
 
 
-    val handler = Handler()
-
-    val millisTime = 10  //1000=1초에 한번씩 실행
-    private val handlerTask = object : Runnable {
-        override fun run() {
-            getDistanceX()
-            tvSpeedX!!.text = resources.getString(R.string.label_speedX, nowSpeedX)
-            tvDisX!!.text = resources.getString(R.string.label_disX, distanceX)
-
-            tvSpeedY!!.text = resources.getString(R.string.label_speedY, nowSpeedY)
-            tvDisY!!.text = resources.getString(R.string.label_disY, distanceY)
-
-            tvSpeedZ!!.text = resources.getString(R.string.label_speedZ, nowSpeedZ)
-            tvDisZ!!.text = resources.getString(R.string.label_disZ, distanceZ)
-
-
-            tvTotD!!.text = resources.getString(R.string.label_totalDis, totalD)
-
-            handler.postDelayed(this, millisTime.toLong()) // millisTiem 이후 다시
-        }
-    }
 
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
