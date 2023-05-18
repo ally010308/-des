@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private var betweenStationDis:Float = 0F
 
-    private var stopCount = 0 //멈춤 카운트
+    //private var stopCount = 0 //멈춤 카운트
 
     private lateinit var listView: ListView
     private lateinit var adapter: ArrayAdapter<String>
@@ -255,8 +255,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             Toast.makeText(this, "이동이 멈춤", Toast.LENGTH_LONG).show()
 
             isMoving = false
-            stopCount++
-            tvCount!!.text = resources.getString(R.string.label_count, stopCount)
+            //stopCount++
+            //tvCount!!.text = resources.getString(R.string.label_count, stopCount)
             reset()
         }
     }
