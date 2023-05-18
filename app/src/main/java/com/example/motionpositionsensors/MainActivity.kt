@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private var tvTotD: TextView? = null
 
+    private var tvMove: TextView? = null
     private var tvCount: TextView? = null
 
 
@@ -108,6 +109,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         tvTotD = findViewById<View>(R.id.label_totalDis) as TextView
 
+        tvMove = findViewById<View>(R.id.label_Move) as TextView
         tvCount = findViewById<View>(R.id.count) as TextView
 
         // sensors connection
@@ -144,7 +146,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         val stopButton: Button = findViewById(R.id.stop_button)
         stopButton.setOnClickListener {
-            // 버튼을 클릭했을 때 실행되어야 하는 동작을 여기에 작성합니다.
+            // 버튼을 클릭했을 때 실행되어야 하는 동작을 여기에 작성
             reset()
             Toast.makeText(this, "이동이 멈춤", Toast.LENGTH_LONG).show()
         }
@@ -154,7 +156,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onStart() { //앱 실행시 시작하는 구간
         super.onStart()
         if (mSensorLinearAcceleration != null) { mSensorManager!!.registerListener(this, mSensorLinearAcceleration, SensorManager.SENSOR_DELAY_NORMAL) }
-
+        tvMove!!.text = resources.getString(R.string.label_Movie)
         //handler.post(handlerTask)
 
     }
@@ -247,9 +249,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         if (deltaSpeed > 1.5f) {
             // 이동 감지
+            tvMove!!.text = resources.getString(R.string.moving)
             isMoving = true
         } else if (isMoving && totalSpeed < 10) {
             Toast.makeText(this, "이동이 멈춤", Toast.LENGTH_LONG).show()
+
             isMoving = false
             stopCount++
             tvCount!!.text = resources.getString(R.string.label_count, stopCount)
@@ -257,6 +261,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
     private fun reset() {
+        tvMove!!.text = resources.getString(R.string.stop)
         nowAccX = 0F
         nowAccY = 0f
         nowAccZ = 0f
